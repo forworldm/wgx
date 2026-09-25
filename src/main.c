@@ -417,6 +417,11 @@ int main(int argc, char *argv[]) {
         if (uapi_fd_str)
             g_device.uapi_fd = atoi(uapi_fd_str);
 
+        if (config_path && load_wg_config(&g_device, config_path) < 0) {
+            fprintf(stderr, "Failed to load config: %s\n", config_path);
+            return 1;
+        }
+
         if (!foreground) {
             int tfd = tun_open(ifname, g_device.ifname);
             if (tfd < 0) {
