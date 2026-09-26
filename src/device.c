@@ -190,9 +190,6 @@ static void rx_buffer_release(wg_device_t *dev, wg_rx_buffer_t *buf) {
 }
 
 static void udp_recv_buffer_release(wg_device_t *dev, const uv_buf_t *buf) {
-    if (!buf || !buf->base)
-        return;
-    rx_buffer_release(dev, rx_buffer_from_data(buf->base));
 }
 
 static int udp_send_takeover(wg_device_t *dev, const struct sockaddr *addr,
@@ -957,9 +954,8 @@ static void on_udp_recv(uv_udp_t *handle,
 static void on_udp_alloc(uv_handle_t *handle, size_t suggested_size, uv_buf_t *buf) {
     (void)suggested_size;
     wg_device_t *dev = handle->data;
-    wg_rx_buffer_t *rxbuf = rx_buffer_acquire(dev);
-    buf->base = rxbuf ? (char *)rxbuf->data : NULL;
-    buf->len  = rxbuf ? WG_RX_BUFFER_SIZE : 0;
+    buf->base = dev->udp_msgs_buffer;
+    buf->len  = UDP_MSGS_BUFFER_SIZE;
 }
 
 /* ---- TUN poll callback ---- */
@@ -1062,7 +1058,7 @@ int device_start(wg_device_t *dev) {
     }
 
     /* Bind IPv4 UDP socket */
-    uv_udp_init(dev->loop, &dev->udp4);
+    uv_udp_init_ex(dev->loop, &dev->udp4, UV_UDP_RECVMMSG);
     dev->udp4.data = dev;
     {
         struct sockaddr_in b4;
@@ -1085,7 +1081,7 @@ int device_start(wg_device_t *dev) {
     }
 
     /* Bind IPv6 UDP socket (best-effort: skip if no IPv6 support) */
-    uv_udp_init(dev->loop, &dev->udp6);
+    uv_udp_init_ex(dev->loop, &dev->udp6, UV_UDP_RECVMMSG);
     dev->udp6.data = dev;
     {
         struct sockaddr_in6 b6;

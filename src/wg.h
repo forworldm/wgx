@@ -182,6 +182,7 @@ typedef struct {
 
 /* ---- Peer ---- */
 #define PEER_QUEUE_SIZE     512
+#define UDP_MSGS_BUFFER_SIZE (16*(64<<10))
 
 typedef struct wg_peer {
     struct wg_device    *device;
@@ -269,6 +270,7 @@ typedef struct wg_device {
     uv_loop_t           *loop;
     uv_udp_t            udp4;   /* IPv4 socket */
     uv_udp_t            udp6;   /* IPv6 socket */
+    char udp_msgs_buffer[UDP_MSGS_BUFFER_SIZE];
     int                 udp6_active;  /* 1 if udp6 was successfully bound */
     uv_poll_t           tun_poll;
     uv_pipe_t           uapi_server;
