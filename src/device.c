@@ -195,6 +195,27 @@ static void udp_recv_buffer_release(wg_device_t *dev, const uv_buf_t *buf) {
     rx_buffer_release(dev, rx_buffer_from_data(buf->base));
 }
 
+static int udp_send_takeover(wg_device_t *dev, const struct sockaddr *addr,
+                             sa_family_t family, wg_udp_send_req_t *sreq, size_t len) {
+    uv_buf_t uvbuf = uv_buf_init((char *)sreq->data, (unsigned int)len);
+    int ret = uv_udp_try_send(udp_for_family(dev, family), &uvbuf, 1, addr);
+    if (ret >= 0)
+        goto done;
+    if (ret != UV_EAGAIN)
+        goto done;
+
+    sreq->buf.base = (char *)sreq->data;
+    sreq->buf.len = len;
+    ret = uv_udp_send(&sreq->req, udp_for_family(dev, family),
+                      &sreq->buf, 1, addr, udp_send_done);
+    if (ret >= 0)
+        return 0;
+
+done:
+    udp_send_req_release(dev, sreq);
+    return ret >= 0 ? 0 : ret;
+}
+
 static int udp_send_copy(wg_device_t *dev, const struct sockaddr *addr,
                          sa_family_t family, const uint8_t *data, size_t len) {
     uv_buf_t uvbuf = uv_buf_init((char *)data, (unsigned int)len);
@@ -417,10 +438,9 @@ int device_send_to_peer(wg_device_t *dev, wg_peer_t *peer,
     /* Build transport header */
     size_t padded = device_pad_packet(pktlen);
     size_t total  = MSG_TRANSPORT_HDR_SIZE + padded + WG_AEAD_TAG_LEN;
-    wg_tx_buffer_t *txb = tx_buffer_acquire(dev);
+    wg_udp_send_req_t *txb = udp_send_req_acquire(dev);
     if (!txb) return -1;
     uint8_t *buf = txb->data;
-    memset(buf, 0, total);
 
     msg_transport_hdr_t *hdr = (msg_transport_hdr_t *)buf;
     hdr->type     = wg_make_type(MSG_TRANSPORT, dev->client_id);
@@ -432,7 +452,9 @@ int device_send_to_peer(wg_device_t *dev, wg_peer_t *peer,
     if(pktlen > 0) {
       memcpy(plaintext, pkt, pktlen);
     }
-    /* rest already zero-padded */
+    if (padded > pktlen) {
+        memset(plaintext + pktlen, 0, padded - pktlen);
+    }
 
     /* Encrypt in-place: nonce is little-endian 64-bit padded to 12 bytes */
     uint8_t nonce_bytes[WG_NONCE_LEN] = {0};
@@ -445,7 +467,7 @@ int device_send_to_peer(wg_device_t *dev, wg_peer_t *peer,
     if (wg_chacha20poly1305_encrypt(ciphertext, kp->send_key, nonce_bytes,
                                      plaintext, padded,
                                      NULL, 0) < 0) {
-        tx_buffer_release(dev, txb);
+        udp_send_req_release(dev, txb);
         return -1;
     }
 
@@ -457,14 +479,13 @@ int device_send_to_peer(wg_device_t *dev, wg_peer_t *peer,
     pthread_mutex_unlock(&peer->endpoint_lock);
 
     if (ep_len == 0) {
-        tx_buffer_release(dev, txb);
+        udp_send_req_release(dev, txb);
         return -1;
     }
 
     /* Send via UDP - choose socket based on endpoint address family */
-    int sent = udp_send_copy(dev, (const struct sockaddr *)&ep, ep.ss_family,
-                             buf, total);
-    tx_buffer_release(dev, txb);
+    int sent = udp_send_takeover(dev, (const struct sockaddr *)&ep, ep.ss_family,
+                             txb, total);
     if (sent < 0)
         wg_dbg(dev, "UDP send error: %s", uv_strerror(sent));
     else
