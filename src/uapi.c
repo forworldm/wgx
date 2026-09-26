@@ -201,6 +201,11 @@ static int process_set(wg_device_t *dev, const char *data) {
                 pthread_rwlock_unlock(&dev->identity_lock);
                 wg_memzero(priv, WG_KEY_LEN);
             } else err = EINVAL;
+        } else if (strcmp(key, "client_id") == 0) {
+            sscanf(val, "%2hhx%2hhx%2hhx",
+                    &dev->client_id[0],
+                    &dev->client_id[1],
+                    &dev->client_id[2]);
         } else if (strcmp(key, "listen_port") == 0) {
             int port = atoi(val);
             if (port < 0 || port > 65535) { err = EINVAL; }

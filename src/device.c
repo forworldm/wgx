@@ -423,7 +423,7 @@ int device_send_to_peer(wg_device_t *dev, wg_peer_t *peer,
     memset(buf, 0, total);
 
     msg_transport_hdr_t *hdr = (msg_transport_hdr_t *)buf;
-    hdr->type     = wg_cpu_to_le32(MSG_TRANSPORT);
+    hdr->type     = wg_make_type(MSG_TRANSPORT, dev->client_id);
     hdr->receiver = wg_cpu_to_le32(kp->remote_index);
     hdr->counter  = wg_cpu_to_le64(nonce);
 
@@ -917,7 +917,7 @@ static void on_udp_recv(uv_udp_t *handle,
     }
     uint32_t msg_type;
     memcpy(&msg_type, data, 4);
-    msg_type = wg_le32_to_cpu(msg_type);
+    msg_type = wg_get_type(msg_type);
     wg_dbg(dev, "UDP recv: type=%u len=%zu from %s", msg_type, len, srcstr);
 
     switch (msg_type) {

@@ -240,7 +240,7 @@ void cookie_gen_init(wg_cookie_gen_t *cg, const uint8_t pub[WG_KEY_LEN]) {
 void cookie_add_macs(wg_cookie_gen_t *cg, uint8_t *msg, size_t msglen,
                      size_t mac1_off, size_t mac2_off, uint64_t now_ms) {
     /* MAC1 = BLAKE2s-128(mac1_key, msg[0..mac1_off)) */
-    wg_blake2s128_mac(msg + mac1_off,
+    wg_msg_blake2s128_mac(msg + mac1_off,
                       cg->mac1_key, WG_HASH_LEN,
                       msg, mac1_off);
     pthread_mutex_lock(&cg->mutex);
@@ -251,7 +251,7 @@ void cookie_add_macs(wg_cookie_gen_t *cg, uint8_t *msg, size_t msglen,
     int cookie_valid = cg->cookie_set_ms &&
                        (now_ms - cg->cookie_set_ms < COOKIE_REFRESH_TIME_MS);
     if (cookie_valid) {
-        wg_blake2s128_mac(msg + mac2_off,
+        wg_msg_blake2s128_mac(msg + mac2_off,
                           cg->cookie, WG_COOKIE_LEN,
                           msg, mac2_off);
     } else {
@@ -292,7 +292,7 @@ int cookie_validate_macs(wg_cookie_checker_t *cc,
     (void)msglen;
     /* Validate MAC1 */
     uint8_t expected_mac1[WG_MAC_LEN];
-    wg_blake2s128_mac(expected_mac1, cc->mac1_key, WG_HASH_LEN, msg, mac1_off);
+    wg_msg_blake2s128_mac(expected_mac1, cc->mac1_key, WG_HASH_LEN, msg, mac1_off);
     if (!wg_ct_equal(expected_mac1, msg + mac1_off, WG_MAC_LEN))
         return -1;
 
@@ -311,7 +311,7 @@ int cookie_validate_macs(wg_cookie_checker_t *cc,
     pthread_mutex_unlock(&cc->mutex);
 
     uint8_t expected_mac2[WG_MAC_LEN];
-    wg_blake2s128_mac(expected_mac2, expected_cookie, WG_COOKIE_LEN, msg, mac2_off);
+    wg_msg_blake2s128_mac(expected_mac2, expected_cookie, WG_COOKIE_LEN, msg, mac2_off);
     if (!wg_ct_equal(expected_mac2, msg + mac2_off, WG_MAC_LEN))
         return 1;  /* MAC1 OK but MAC2 failed → send cookie reply */
     return 0;
@@ -323,7 +323,7 @@ void cookie_create_reply(wg_cookie_checker_t *cc,
                           uint32_t receiver,
                           msg_cookie_reply_t *reply,
                           uint64_t now_ms) {
-    reply->type     = wg_cpu_to_le32(MSG_COOKIE_REPLY);
+    reply->type     = wg_make_type(MSG_COOKIE_REPLY, NULL);
     reply->receiver = wg_cpu_to_le32(receiver);
     wg_random_bytes(reply->nonce, WG_XNONCE_LEN);
 
@@ -349,7 +349,7 @@ void cookie_create_reply(wg_cookie_checker_t *cc,
 int cookie_consume_reply(wg_cookie_gen_t *cg,
                           const msg_cookie_reply_t *reply,
                           uint64_t now_ms) {
-    if (wg_le32_to_cpu(reply->type) != MSG_COOKIE_REPLY) return -1;
+    if (wg_get_type(reply->type) != MSG_COOKIE_REPLY) return -1;
 
     pthread_mutex_lock(&cg->mutex);
     if (!cg->has_last_mac1) {
@@ -391,7 +391,7 @@ int noise_create_initiation(wg_device_t *dev, wg_peer_t *peer,
     /* mixHash(remote_static) */
     mix_hash(hs->hash, hs->remote_static, WG_KEY_LEN);
 
-    msg->type = wg_cpu_to_le32(MSG_INITIATION);
+    msg->type = wg_make_type(MSG_INITIATION, dev->client_id);
 
     /* msg.ephemeral = local_ephemeral_pub */
     memcpy(msg->ephemeral, hs->local_ephemeral_pub, WG_KEY_LEN);
@@ -470,7 +470,7 @@ fail:
 /* ---- Handshake: Consume Initiation ---- */
 wg_peer_t *noise_consume_initiation(wg_device_t *dev,
                                       msg_initiation_t *msg) {
-    if (wg_le32_to_cpu(msg->type) != MSG_INITIATION) return NULL;
+    if (wg_get_type(msg->type) != MSG_INITIATION) return NULL;
 
     pthread_rwlock_rdlock(&dev->identity_lock);
 
@@ -593,7 +593,7 @@ int noise_create_response(wg_device_t *dev, wg_peer_t *peer,
     if (!hs->local_index)
         goto fail;
 
-    msg->type     = wg_cpu_to_le32(MSG_RESPONSE);
+    msg->type     = wg_make_type(MSG_RESPONSE, NULL);
     msg->sender   = wg_cpu_to_le32(hs->local_index);
     msg->receiver = wg_cpu_to_le32(hs->remote_index);
 
@@ -655,7 +655,7 @@ fail:
 /* ---- Handshake: Consume Response ---- */
 wg_peer_t *noise_consume_response(wg_device_t *dev,
                                    msg_response_t *msg) {
-    if (wg_le32_to_cpu(msg->type) != MSG_RESPONSE) return NULL;
+    if (wg_get_type(msg->type) != MSG_RESPONSE) return NULL;
 
     uint32_t receiver = wg_le32_to_cpu(msg->receiver);
     uint32_t sender = wg_le32_to_cpu(msg->sender);

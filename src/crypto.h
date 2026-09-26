@@ -66,6 +66,11 @@ void wg_blake2s128_mac(uint8_t out[WG_MAC_LEN],
                        const uint8_t *key, size_t keylen,
                        const uint8_t *data, size_t datalen);
 
+/* like `wg_blake2s128_mac`, but it ignores `msg->reserved_zero` */
+int wg_msg_blake2s128_mac(uint8_t out[WG_MAC_LEN],
+                       const uint8_t *key, size_t keylen,
+                       const uint8_t *data, size_t datalen);
+
 /* HMAC-BLAKE2s-256 */
 void wg_hmac_blake2s(uint8_t out[WG_HASH_LEN],
                      const uint8_t *key,  size_t keylen,

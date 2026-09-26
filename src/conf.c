@@ -311,6 +311,13 @@ static int apply_endpoint(wg_peer_t *peer, const char *endpoint_str) {
     return 0;
 }
 
+static void apply_client_id(wg_device_t *dev, const char *id) {
+    sscanf(id, "%2hhx%2hhx%2hhx",
+           &dev->client_id[0],
+           &dev->client_id[1],
+           &dev->client_id[2]);
+}
+
 /* ---- Main config loader -------------------------------------------------- */
 int load_wg_config(wg_device_t *dev, const char *path) {
     FILE *f = fopen(path, "r");
@@ -369,6 +376,8 @@ int load_wg_config(wg_device_t *dev, const char *path) {
                 pthread_rwlock_unlock(&dev->identity_lock);
                 wg_dbg(dev, "conf: PrivateKey loaded");
                 ok = 1;
+            } else if (strcasecmp(key, "ClientID") == 0) {
+                apply_client_id(dev, val);
             } else if (strcasecmp(key, "ListenPort") == 0) {
                 dev->listen_port = (uint16_t)atoi(val);
             }

@@ -124,6 +124,26 @@ void wg_blake2s128_mac(uint8_t out[WG_MAC_LEN],
     blake2s(out, WG_MAC_LEN, data, datalen, key, keylen);
 }
 
+int wg_msg_blake2s128_mac(uint8_t out[WG_MAC_LEN],
+                       const uint8_t *key, size_t keylen,
+                       const uint8_t *data, size_t datalen) {
+    if (datalen < 4) return -1;
+    const int outlen = WG_MAC_LEN;
+    blake2s_state S;
+
+    int ret;
+    if (keylen > 0)
+        ret = blake2s_init_key(&S, outlen, key, keylen);
+    else
+        ret = blake2s_init(&S, outlen);
+    if (ret < 0) return ret;
+
+    uint8_t type[4] = {data[0], 0, 0, 0};
+    if (blake2s_update(&S, type, 4) < 0) return -1;
+    if (blake2s_update(&S, data + 4, datalen - 4) < 0) return -1;
+    return blake2s_final(&S, out, outlen);
+}
+
 /* ---- HMAC-BLAKE2s-256 ----
  * HMAC with BLAKE2s-256 as the underlying hash.
  * BLAKE2s in keyed mode with a full-block key (padded) for ipad/opad.

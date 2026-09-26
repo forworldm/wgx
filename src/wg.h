@@ -242,6 +242,7 @@ typedef struct wg_device {
     pthread_rwlock_t    identity_lock;
     uint8_t             private_key[WG_KEY_LEN];
     uint8_t             public_key[WG_KEY_LEN];
+    uint8_t             client_id[3];
 
     /* Peers */
     pthread_rwlock_t    peers_lock;
@@ -319,3 +320,24 @@ typedef struct wg_device {
 void wg_log(wg_device_t *dev, int level, const char *fmt, ...);
 #define wg_err(dev, ...)  wg_log(dev, LOG_ERROR,   __VA_ARGS__)
 #define wg_dbg(dev, ...)  wg_log(dev, LOG_VERBOSE, __VA_ARGS__)
+
+static inline uint8_t wg_get_type(uint32_t type) {
+    return ((uint8_t *) &type)[0];
+}
+
+static inline uint32_t wg_make_type(uint8_t type, const uint8_t id[3]) {
+    union T {
+        uint32_t i;
+        uint8_t b[4];
+    } u;
+    if (id) {
+        u.b[0] = type;
+        u.b[1] = id[0];
+        u.b[2] = id[1];
+        u.b[3] = id[2];
+    } else {
+        u.i = 0;
+        u.b[0] = type;
+    }
+    return u.i;
+}
