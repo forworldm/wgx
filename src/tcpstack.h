@@ -21,6 +21,7 @@ typedef enum {
 } tcp_state_t;
 
 #define WG_TCP_MSS             1380  /* WG MTU 1420 - 20 IP - 20 TCP */
+#define WG_TCP_MSS_AF6         1360
 #define WG_TCP_WINDOW          65535
 #define WG_TCP_WINDOW_SCALE    4
 #define WG_TCP_SENDBUF_INITIAL_SIZE (32 * 1024)
@@ -153,3 +154,7 @@ void tcp_close(tcp_conn_t *conn);
 
 /* Feed an inbound decrypted IP packet from the WireGuard tunnel. */
 void tcpstack_input(tcpstack_t *stack, const uint8_t *ip_pkt, size_t len);
+
+static inline int tcps_mss(tcp_conn_t *conn) {
+    return conn->family == AF_INET ? WG_TCP_MSS : WG_TCP_MSS_AF6;
+}
